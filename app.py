@@ -2,99 +2,148 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
 import numpy as np
+import os
+import time
 from databricks import sql
 
 app = Flask(__name__)
 CORS(app)
 
-# ===== CONFIG DATABRICKS =====
-server_hostname = "YOUR_HOST"
-http_path = "YOUR_HTTP_PATH"
-access_token = "YOUR_TOKEN"
+# ================= ENV =================
+DATABRICKS_HOST = os.getenv("DATABRICKS_HOST")
+DATABRICKS_HTTP_PATH = os.getenv("DATABRICKS_HTTP_PATH")
+DATABRICKS_TOKEN = os.getenv("DATABRICKS_TOKEN")
+AI_URL = os.getenv("AI_URL")
 
-# ===== CONNECT =====
+# ================= DEBUG ENV =================
+print("HOST:", DATABRICKS_HOST)
+print("HTTP PATH:", DATABRICKS_HTTP_PATH)
+print("TOKEN:", str(DATABRICKS_TOKEN)[:5] if DATABRICKS_TOKEN else None)
+print("AI URL:", AI_URL)
+
+# ================= DB CONNECT =================
 def get_conn():
     return sql.connect(
-        server_hostname=server_hostname,
-        http_path=http_path,
-        access_token=access_token
+        server_hostname=DATABRICKS_HOST,
+        http_path=DATABRICKS_HTTP_PATH,
+        access_token=DATABRICKS_TOKEN
     )
 
-# ===== AI =====
+# ================= AI CALL (RETRY) =================
 def get_embedding(image_bytes):
-    url = "https://bufalo-api-973102760389.asia-southeast1.run.app/predict"
 
     files = {
         "file": ("img.jpg", image_bytes, "image/jpeg")
     }
 
-    res = requests.post(url, files=files)
+    for i in range(3):  # retry 3 lần
+        try:
+            res = requests.post(AI_URL, files=files, timeout=10)
 
-    if res.status_code != 200:
-        return None
+            if res.status_code == 200:
+                data = res.json()
+                return data.get("embedding")
 
-    return res.json().get("embedding")
+        except Exception as e:
+            print("AI ERROR:", e)
 
-# ===== COSINE =====
+        time.sleep(1)
+
+    return None
+
+# ================= COSINE =================
 def cosine(a, b):
     a = np.array(a)
     b = np.array(b)
     return np.dot(a,b)/(np.linalg.norm(a)*np.linalg.norm(b))
 
-# ===== REGISTER =====
+# ================= REGISTER =================
 @app.route("/register", methods=["POST"])
 def register():
 
-    name = request.form.get("name")
-    file = request.files.get("file")
+    try:
+        name = request.form.get("name")
+        file = request.files.get("file")
 
-    emb = get_embedding(file.read())
+        if not name or not file:
+            return "Missing data", 400
 
-    if emb is None:
-        return "No face", 400
+        print("Register:", name)
 
-    conn = get_conn()
-    cursor = conn.cursor()
+        emb = get_embedding(file.read())
 
-    cursor.execute(
-        "INSERT INTO face_db.faces VALUES (?, ?)",
-        (name, emb)
-    )
+        if emb is None:
+            return "No face detected", 400
 
-    cursor.close()
-    conn.close()
+        conn = get_conn()
+        cursor = conn.cursor()
 
-    return "Saved"
+        cursor.execute(
+            "INSERT INTO face_db.faces VALUES (?, ?)",
+            (name, emb)
+        )
 
-# ===== RECOGNIZE =====
+        cursor.close()
+        conn.close()
+
+        return "Saved"
+
+    except Exception as e:
+        print("REGISTER ERROR:", e)
+        return "Server error", 500
+
+
+# ================= RECOGNIZE =================
 @app.route("/recognize", methods=["POST"])
 def recognize():
 
-    emb = request.json.get("embedding")
+    try:
+        data = request.get_json()
+        emb = data.get("embedding")
 
-    conn = get_conn()
-    cursor = conn.cursor()
+        if emb is None:
+            return jsonify({"name": "Error"}), 400
 
-    cursor.execute("SELECT name, embedding FROM face_db.faces")
+        conn = get_conn()
+        cursor = conn.cursor()
 
-    best_name = "Unknown"
-    best_score = 0
+        cursor.execute("SELECT name, embedding FROM face_db.faces")
 
-    for row in cursor.fetchall():
+        best_name = "Unknown"
+        best_score = 0
 
-        name = row[0]
-        emb_db = row[1]
+        for row in cursor.fetchall():
 
-        score = cosine(emb, emb_db)
+            name = row[0]
+            emb_db = row[1]
 
-        if score > best_score:
-            best_score = score
-            best_name = name
+            score = cosine(emb, emb_db)
 
-    cursor.close()
-    conn.close()
+            if score > best_score:
+                best_score = score
+                best_name = name
 
-    if best_score > 0.5:
-        return jsonify({"name": best_name})
+        cursor.close()
+        conn.close()
 
-    return jsonify({"name": "Unknown"})
+        print("Best:", best_name, best_score)
+
+        if best_score > 0.5:
+            return jsonify({"name": best_name})
+
+        return jsonify({"name": "Unknown"})
+
+    except Exception as e:
+        print("RECOGNIZE ERROR:", e)
+        return jsonify({"name": "Error"}), 500
+
+
+# ================= HEALTH CHECK =================
+@app.route("/")
+def home():
+    return "Face API Running"
+
+
+# ================= RUN =================
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
