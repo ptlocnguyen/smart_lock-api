@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request
 from flask_cors import CORS
 import requests
 import numpy as np
@@ -20,7 +20,9 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 @app.after_request
 def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Content-Type'] = 'text/plain'     # QUAN TRỌNG: giảm overhead
+    response.headers['Connection'] = 'keep-alive'
     return response
 
 # ===== ENV =====
@@ -29,7 +31,7 @@ PATH = os.getenv("DATABRICKS_HTTP_PATH")
 TOKEN = os.getenv("DATABRICKS_TOKEN")
 AI_URL = os.getenv("AI_URL")
 
-# ===== CACHE (MULTI EMBEDDING) =====
+# ===== CACHE =====
 faces_cache = {}
 
 # ===== DB =====
@@ -73,19 +75,18 @@ def load_faces():
 
 load_faces()
 
-# ===== AI CALL (RETRY) =====
+# ===== AI CALL (GIẢM TIMEOUT + BỎ RETRY NẶNG) =====
 def get_embedding(image_bytes):
 
     files = {"file": ("img.jpg", image_bytes, "image/jpeg")}
 
-    for _ in range(2):
-        try:
-            res = requests.post(AI_URL, files=files, timeout=5)
+    try:
+        res = requests.post(AI_URL, files=files, timeout=3)
 
-            if res.status_code == 200:
-                return res.json().get("embedding")
-        except:
-            pass
+        if res.status_code == 200:
+            return res.json().get("embedding")
+    except:
+        pass
 
     return None
 
@@ -95,7 +96,7 @@ def cosine(a, b):
     b = np.array(b)
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
-# ===== MATCH (MULTI EMBEDDING) =====
+# ===== MATCH =====
 def match_face(emb):
 
     best_name = "Unknown"
@@ -148,7 +149,6 @@ def register():
         cur.close()
         conn.close()
 
-        # update cache
         if name not in faces_cache:
             faces_cache[name] = []
 
@@ -160,19 +160,23 @@ def register():
         print("REGISTER ERROR:", e)
         return "DB Error", 500
 
-# ================= RECOGNIZE =================
+# ================= RECOGNIZE (TỐI ƯU CHÍNH) =================
 @app.route("/recognize_image", methods=["POST"])
 def recognize_image():
 
     file = request.files.get("file")
 
+    if not file:
+        return "No file"
+
     emb = get_embedding(file.read())
 
     if emb is None:
-        return jsonify({"name": "No face"})
+        return "No face"   # KHÔNG JSON NỮA
 
     name = match_face(emb)
 
+    # log nhưng KHÔNG để crash
     if name != "Unknown":
         try:
             conn = get_conn()
@@ -190,7 +194,7 @@ def recognize_image():
         except:
             pass
 
-    return jsonify({"name": name})
+    return name   # KHÔNG JSON
 
 # ================= LOGS =================
 @app.route("/logs")
@@ -207,10 +211,10 @@ def logs():
         cur.close()
         conn.close()
 
-        return jsonify(data)
+        return json.dumps(data)
 
     except:
-        return jsonify([])
+        return "[]"
 
 @app.route("/")
 def home():
