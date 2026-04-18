@@ -4,3 +4,4 @@ requests
 numpy
 databricks-sql-connector[pyarrow]
 pytz
+gunicorn
