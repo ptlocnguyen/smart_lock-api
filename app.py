@@ -177,6 +177,21 @@ def recognize_image():
 
     name = match_face(emb)
 
+    if name != "Unknown":
+
+        conn = get_conn()
+        cur = conn.cursor()
+    
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+        cur.execute(
+            "INSERT INTO face_db.logs VALUES (?, ?)",
+            (name, now)
+        )
+    
+        cur.close()
+        conn.close()
+
     return jsonify({"name": name})
 
 # ================= RECOGNIZE (ESP32) =================
