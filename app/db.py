@@ -19,4 +19,8 @@ def get_connection():
     )
 
     conn.autocommit = True
+    cursor = conn.cursor()
+
+    # CHỌN DATABASE
+    cursor.execute("USE smart_lock")
     return conn
