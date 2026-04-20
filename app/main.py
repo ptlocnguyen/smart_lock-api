@@ -72,7 +72,10 @@ async def register_face(user_id: str, file: UploadFile = File(...)):
         rows = cursor.fetchall()
 
         # lọc embedding lỗi
-        valid = [r[0] for r in rows if r[0] and len(r[0]) == 512]
+        valid = [
+            r[0] for r in rows
+            if r[0] is not None and hasattr(r[0], "__len__") and len(r[0]) == 512
+        ]
 
         if not valid:
             return {"error": "No valid embedding"}
