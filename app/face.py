@@ -2,7 +2,7 @@ import requests
 import numpy as np
 from app.db import get_connection
 
-API_URL = "https://bufalo-api-973102760389.asia-southeast1.run.app/predict"
+API_URL = os.getenv("AI_URL")
 
 
 def normalize(v):
