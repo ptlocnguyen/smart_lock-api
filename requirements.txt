@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+requests
+numpy
+python-multipart
+databricks-sql-connector
+python-dotenv
