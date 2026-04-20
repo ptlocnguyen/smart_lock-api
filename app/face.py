@@ -21,14 +21,34 @@ def get_embedding(file_bytes):
     try:
         res = requests.post(
             API_URL,
-            files={"file": ("img.jpg", file_bytes)},
+            files={
+                "file": ("image.jpg", file_bytes, "image/jpeg")
+            },
             timeout=5
         )
-        if res.status_code == 200:
-            return res.json().get("embedding")
-    except:
+
+        if res.status_code != 200:
+            print("API ERROR:", res.text)
+            return None
+
+        data = res.json()
+
+        if "embedding" not in data:
+            print("NO EMBEDDING:", data)
+            return None
+
+        emb = data["embedding"]
+
+        if not emb or len(emb) == 0:
+            print("EMPTY EMBEDDING")
+            return None
+
+        print("Embedding OK:", len(emb))
+        return emb
+
+    except Exception as e:
+        print("EXCEPTION:", e)
         return None
-    return None
 
 
 def recognize_face(file_bytes):
