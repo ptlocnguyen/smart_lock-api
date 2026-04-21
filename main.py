@@ -13,9 +13,17 @@ from config import SIM_THRESHOLD
 from db import insert_log, get_connection
 
 from fastapi.openapi.utils import get_openapi
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # cho phép tất cả (dev)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # =========================================
 # FIX SWAGGER FILE UPLOAD (QUAN TRỌNG)
