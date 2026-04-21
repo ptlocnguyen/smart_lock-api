@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+insightface
+numpy
+pillow
+python-multipart
+onnxruntime
+databricks-sql-connector[pyarrow]
