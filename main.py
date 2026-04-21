@@ -253,6 +253,31 @@ async def register_face(
     # =========================
     # 5. REFRESH CACHE
     # =========================
+    # =========================
+    # REBUILD CACHE TABLE
+    # =========================
+    conn2 = get_connection()
+    cursor2 = conn2.cursor()
+    
+    cursor2.execute("DELETE FROM smartdoor.core.face_cache")
+    
+    cursor2.execute("""
+    INSERT INTO smartdoor.core.face_cache
+    SELECT 
+      u.user_id,
+      u.user_code,
+      u.full_name,
+      f.embedding
+    FROM smartdoor.core.users u
+    JOIN smartdoor.core.face_profiles f
+    ON u.user_id = f.user_id
+    """)
+    
+    conn2.commit()
+    cursor2.close()
+    conn2.close()
+    
+    # reload RAM cache
     refresh_cache()
 
     return {
