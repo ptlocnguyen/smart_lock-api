@@ -2,6 +2,6 @@ fastapi
 uvicorn
 requests
 numpy
+pydantic
 python-multipart
 databricks-sql-connector[pyarrow]
-python-dotenv
